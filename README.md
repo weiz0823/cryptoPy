@@ -1,11 +1,13 @@
-# cryptoPy -- Wheels of cryptography with Python \[Work in Progress\]
+cryptoPy -- Wheels of cryptography with Python \[Work in Progress\]
+===================================================================
 
-Link to previous C++ implementation: [weiz0823/crypto_practice].
+Link to previous C++ implementation: [weiz0823/crypto\_practice].
 
-## TODO
+TODO
+----
 
-- [  ] Use Python C API to transplant hash functions.
-- [  ] Modular arithmetic: overload operator or use 'mod' module.
-- [  ] Implement ASN.1 module.
+-   \[ \] Use Python C API to transplant hash functions.
+-   \[ \] Modular arithmetic: overload operator or use 'mod' module.
+-   \[ \] Implement ASN.1 module.
 
-[weiz0823/crypto_practice]: https://github.com/weiz0823/crypto_practice
+  [weiz0823/crypto\_practice]: https://github.com/weiz0823/crypto_practice
