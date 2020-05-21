@@ -7,7 +7,7 @@ TODO
 ----
 
 -   \[ \] Use Python C API to transplant hash functions.
--   \[ \] Modular arithmetic: overload operator or use 'mod' module.
+-   \[x\] Modular arithmetic: overload operator~ or use 'mod' module~.
 -   \[ \] Implement ASN.1 module.
 
   [weiz0823/crypto\_practice]: https://github.com/weiz0823/crypto_practice
