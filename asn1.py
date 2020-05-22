@@ -27,12 +27,35 @@ def encode(value):
         return encode_octet_string(value)
     elif isinstance(value, OID):
         return encode_oid(value)
-    elif isinstance(value, list):
-        return Sequence(value).encode()
-    elif isinstance(value, Sequence):
-        return value.encode()
+    elif isinstance(value, list) or isinstance(value, Sequence):
+        return encode_sequence(value)
     else:
         raise EncodeError("cannot encode type {}".format(type(value)))
+
+
+def decode(octets, index=0):
+    try:
+        tag = octets[index]
+        if tag == 0:
+            raise DecodeError("unexpected end-of-content")
+        elif tag == 0x1:
+            return decode_bool(octets, index)
+        elif tag == 0x2:
+            return decode_int(octets, index)
+        elif tag == 0x4:
+            return decode_octet_string(octets, index)
+        elif tag == 0x5:
+            return decode_null(octets, index)
+        elif tag == 0x6:
+            return decode_oid(octets, index)
+        elif tag == 0x8:
+            return decode_utf8string(octets, index)
+        elif tag == 0x30:
+            return decode_sequence(octets, index)
+        elif tag & 0xC0:
+            return decode_custom(octets, index)
+    except IndexError:
+        raise DecodeError("length of octets not enough")
 
 
 class _EOC:
@@ -46,12 +69,6 @@ class Sequence:
 
     def __init__(self, iterable):
         self.ls = iterable
-
-    def encode(self):
-        octets = bytearray()
-        for i in self.ls:
-            octets += encode(i)
-        return bytearray([0x30]) + encode_length_octets(len(octets)) + octets
 
 
 EOC = _EOC()
@@ -76,6 +93,18 @@ class OID:
         return OID(
             self.identifier.rsplit(".", 1)[0], self.description.rsplit("/", 1)[0]
         )
+
+    def __int__(self):
+        return os2ip(encode_oid(self))
+
+
+id_ber_encoding = OID("2.1.1", "/Joint-ISO-ITU-T/ASN.1/Basic-Encoding")
+id_cer_encoding = OID(
+    "2.1.2.0", "/Joint-ISO-ITU-T/ASN.1/BER-Derived/Canonical-Encoding"
+)
+id_der_encoding = OID(
+    "2.1.2.1", "/Joint-ISO-ITU-T/ASN.1/BER-Derived/Distinguished-Encoding"
+)
 
 
 def encode_id_octets(tag: int, isconstructed=False, class_type=0):
@@ -178,6 +207,14 @@ def encode_null():
     return bytearray([0x5, 0])
 
 
+def decode_null():
+    try:
+        if octets[index] != 0x5 or octets[index + 1] != 0:
+            raise DecodeError("not a null object")
+    except IndexError:
+        raise DecodeError("length of octets not enough")
+
+
 def encode_bool(value):
     if value:
         return bytearray([0x1, 0x1, 0xFF])
@@ -185,13 +222,43 @@ def encode_bool(value):
         return bytearray([0x1, 0x1, 0])
 
 
+def decode_bool(octets, index=0):
+    try:
+        if octets[index] != 0x1 or octets[index + 1] != 0x1:
+            raise DecodeError("not a bool object")
+        return bool(octets[index + 2])
+    except IndexError:
+        raise DecodeError("length of octets not enough")
+
+
 def encode_int(value):
     osp = i2osp(value)
     return bytearray([0x2]) + encode_length_octets(len(a)) + osp
 
 
+def decode_int(octets, index=0):
+    try:
+        if octets[index] != 0x2:
+            raise DecodeError("not an int object")
+        length, index = decode_length_octets(octets, index + 1)
+        return os2ip(octets[index : index + length]), index + length
+    except IndexError:
+        raise DecodeError("length of octets not enough")
+
+
 def encode_octet_string(value):
     return bytearray([0x4]) + encode_length_octets(len(value)) + value
+
+
+def decode_octet_string(octets, index=0):
+    try:
+        if octets[index] != 0x4:
+            raise DecodeError("not a octet string object")
+        length, index = decode_length_octets(octets, index + 1)
+        octets[index + length - 1]  # test for index
+        return octets[index : index + length], index + length
+    except IndexError:
+        raise DecodeError("length of octets not enough")
 
 
 def encode_oid(value):
@@ -226,7 +293,7 @@ def decode_oid(octets, index=0):
     if length <= 0:
         raise DecodeError("length of encoded OID should be at least 1")
     try:
-        octets[index + length - 1]
+        octets[index + length - 1]  # test for index
     except IndexError:
         raise DecodeError("length of octets not enough")
     tmp = 0
@@ -263,7 +330,7 @@ def decode_oid(octets, index=0):
             i += 1
     except IndexError:
         raise DecodeError("not properly encoded")
-    return OID(".".join(map(str, ls)), "")
+    return OID(".".join(map(str, ls)), ""), index + length
 
 
 def encode_utf8string(value, encode_type=0):
@@ -287,3 +354,86 @@ def encode_utf8string(value, encode_type=0):
         )
     else:
         raise EncodeError("unrecognized type for utf8string encoding")
+
+
+def decode_utf8string(octets, index=0):
+    try:
+        if octets[index] == 0xC:
+            # primitive
+            length, index = decode_length_octets(octets, index + 1)
+            octets[index + length - 1]  # test for index
+            return str(octets[index : index + length]), index + length
+        elif octets[index + 1] == 0x80:
+            # indefinite
+            if octets[index + 2] != 0x4:
+                raise DecodeError("wrapped content is not octet string")
+            length, index = decode_length_octets(octets, index + 3)
+            if octets[index + length] != 0 or octets[index + length + 1] != 0:
+                raise DecodeError("indefinite length form not followed by EOC")
+            return str(octets[index : index + length]), index + length + 2
+        else:
+            # definite
+            length, index = decode_length_octets(octets, index + 1)
+            if octets[index] != 0x4:
+                raise DecodeError("wrapped content is not octet string")
+            length, index = decode_length_octets(octets, index + 1)
+            octets[index + length - 1]  # test for index
+            return str(octets[index : index + length]), index + length
+    except IndexError:
+        raise DecodeError("length of octets not enough")
+
+
+def encode_sequence(value):
+    if isinstance(value, Sequence):
+        value = value.ls
+    octets = bytearray()
+    for i in value:
+        octets += encode(i)
+    return bytearray([0x30]) + encode_length_octets(len(octets)) + octets
+
+
+def decode_sequence(octets, index=0):
+    ls = []
+    try:
+        if octets[index] != 0x30:
+            raise DecodeError("not a sequence")
+        length, index = decode_length_octets(octets, index + 1)
+        end_index = index + length
+        while index < end_index:
+            obj, index = decode(octets, index)
+            ls.append(obj)
+        if index > end_index:
+            raise DecodeError("the last object doesn't end at the right place")
+        return ls, end_index
+    except IndexError:
+        raise DecodeError("length of octets not enough")
+
+
+def decode_custom(octets, index=0, more_info=None):
+    """Decode custom class as a sequence.
+
+    If the custom class is implicit, and of primitive type, decoding may fail.
+    """
+    ls = []
+    try:
+        tag, isconstructed, class_type, index = decode_id_octets(octets, index)
+        if isinstance(more_info, list):
+            more_info.append(tag)
+            more_info.append(isconstructed)
+            more_info.append(class_type)
+        length, index = decode_length_octets(octets, index)
+        end_index = index + length
+        while index < end_index:
+            obj, index = decode(octets, index)
+            ls.append(obj)
+        if index > end_index:
+            raise DecodeError("the last object doesn't end at the right place")
+        return ls, end_index
+    except IndexError:
+        raise DecodeError("length of octets not enough")
+
+
+if __name__ == "__main__":
+    code = encode(id_ber_encoding)
+    print(code.hex(), int(id_ber_encoding))
+    print(decode(code)[0].identifier)
