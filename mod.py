@@ -3,6 +3,7 @@ import math
 
 
 def trailing_zeros(a: int):
+    """Return number of trailing zeros in binary representation of a."""
     i = 0
     while a & (1 << i) == 0:
         i += 1
@@ -11,7 +12,10 @@ def trailing_zeros(a: int):
 
 
 def ext_gcd(a: int, b: int):
-    """Extended Euclid Algorithm, returns (d, x, y), where d = gcd(a, b) = a*x + b*y"""
+    """Extended Euclid Algorithm.
+
+    Returns (d, x, y), where d = gcd(a, b) = a*x + b*y.
+    """
     # maintain matrix x, y; z, w
     if a > b:
         x = 1
@@ -40,11 +44,20 @@ def ext_gcd(a: int, b: int):
 
 @total_ordering
 class Mod:
-    """Modular arithmetic with better readability"""
+    """Modular arithmetic with better readability.
+
+    Attributes:
+        modulus -- modulus of the number, should be a non-zero integer
+        value -- the value in modulus, where 0 <= value < modulus
+
+    Operator +, -, *, /, //, ** are defined. / and // are equivalent.
+    a/b (mod n) is defined only if a % gcd(b, n) == 0.
+      And the modulus of the result is n//gcd(b,n).
+    """
 
     def __init__(self, value: int, modulus: int):
         if modulus == 0:
-            raise ValueError("modulus is zero")
+            raise ZeroDivisionError("modulus is zero")
         self.value = value % modulus
         self.modulus = modulus
         pass
@@ -64,7 +77,7 @@ class Mod:
         """Convert other to int with type checking"""
         if isinstance(other, Mod):
             if self.modulus == 0 or other.modulus == 0:
-                raise ValueError("modulus is zero")
+                raise ZeroDivisionError("modulus is zero")
             elif self.modulus == other.modulus:
                 return other.value
             else:
