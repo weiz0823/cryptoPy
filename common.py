@@ -32,7 +32,15 @@ def os2ip(osp):
 class CryptoError(Exception):
     """Base class for errors."""
 
-    pass
+    def __init__(self, message=""):
+        self.message = message
+
+
+class SecurityWarning(Warning):
+    """Base class for security warnings."""
+
+    def __init__(self, message=""):
+        self.message = message
 
 
 class EncodeError(CryptoError):
@@ -79,5 +87,16 @@ class DecryptError(CryptoError):
         self.message = message
 
 
+class HashWarning(SecurityWarning):
+    """Warnings for undefined (or insecure) hash operations."""
+
+    def __init__(self, message=""):
+        self.message = message
+
+
 if __name__ == "__main__":
+    import warnings
+
+    warnings.simplefilter("ignore", SecurityWarning)
+    warnings.warn("test of hash warning", HashWarning)
     raise DecodeError("test of decode error")

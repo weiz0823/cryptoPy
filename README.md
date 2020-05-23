@@ -6,8 +6,9 @@ Link to previous C++ implementation: [weiz0823/crypto\_practice].
 TODO
 ----
 
--   \[ \] Use Python C API to transplant hash functions.
--   \[x\] Modular arithmetic: overload operator\~ or use 'mod' module\~.
--   \[ \] Implement ASN.1 module: ASN.1 decoding.
+-   \[x\] Use Python C API to transplant hash functions.
+-   \[x\] Modular arithmetic: overload operator ~~or use 'mod' module~~.
+-   \[x\] Implement ASN.1 module: ASN.1 decoding.
+-   \[ \] cryptohash: algorithm id, security info, and auto-distribute hash according to algorithm id.
 
   [weiz0823/crypto\_practice]: https://github.com/weiz0823/crypto_practice
