@@ -1,45 +1,6 @@
+"""Modular arithmetic with bteer readability with class Mod."""
 from functools import total_ordering
-import math
-
-
-def trailing_zeros(a: int):
-    """Return number of trailing zeros in binary representation of a."""
-    i = 0
-    while a & (1 << i) == 0:
-        i += 1
-
-    return i
-
-
-def ext_gcd(a: int, b: int):
-    """Extended Euclid Algorithm.
-
-    Returns (d, x, y), where d = gcd(a, b) = a*x + b*y.
-    """
-    # maintain matrix x, y; z, w
-    if a > b:
-        x = 1
-        y = 0
-        z = 0
-        w = 1
-    else:
-        x = 0
-        y = 1
-        z = 1
-        w = 0
-        a, b = b, a
-
-    if b < 0:
-        q, r = divmod(a, b)
-        x = x - q * z
-        y = y - q * w
-        a = r
-    while b != 0:
-        q, r = divmod(a, b)
-        x, z = z, x - q * z
-        y, w = w, y - q * w
-        a, b = b, r
-    return (a, x, y)
+from basic import *
 
 
 @total_ordering
@@ -187,10 +148,57 @@ class Mod:
     def __pow__(self, other: int):
         return Mod(pow(self.value, other, self.modulus), self.modulus)
 
+    def jacobi(self):
+        """Calculate jacobi(value / modulus), return -1, 0, or 1.
+
+
+        Caution: 0 is defined only when it is Legendre symbol, i.e. modulus is prime.
+                 Else, 0 means that symbol is undefined.
+                 Note that even modulus is always undefined.
+        """
+        if self.value == 1 or self.modulus == 1:
+            return 1
+        elif self.value == 0:
+            return 0
+        # separate prime factor 2
+        e = trailing_zeros(self.value)
+        a = self.value >> e
+        # calculate jacobi(2^e, modulus)
+        t = self.modulus & 7
+        if e & 1 == 0:
+            s = 1
+        elif t & 1 == 0:
+            return 0  # undefined for even modulus
+        elif t == 1 or t == 7:
+            s = 1
+        else:  # t == 3 or t == 5
+            s = -1
+        # now jacobi(value,modulus)=s*jacobi(a,modulus), use QRL to invert it
+        # decide the parity of (modulus-1) * (a-1) / 4
+        if t & 3 == 3 and a & 3 == 3:
+            s = -s
+        # reduce like Euclid algorithm and binary gcd
+        return s * Mod(self.modulus, a).jacobi()
+
+    def half(self):
+        if self.modulus & 1 == 1:
+            if self.value & 1 == 1:
+                return Mod((self.value + self.modulus) >> 1, self.modulus)
+            else:
+                return Mod(self.value >> 1, self.modulus)
+        else:
+            if self.value & 1 == 1:
+                raise ValueError(
+                    "{} / 2 (mod {}) is not computable".format(self.value, self.modulus)
+                )
+            else:
+                return Mod(self.value >> 1, self.modulus >> 1)
+
 
 if __name__ == "__main__":
     a = Mod(-1, 5)
     print(a)
     a = a / 3
     print(a)
+    print(f"jacobi(5, 3439601197)={Mod(5, 3439601197).jacobi()}")
     print("Tests passed!")

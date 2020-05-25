@@ -1,3 +1,10 @@
+"""Abstract Syntac Notation One.
+
+Encode/decode protocol:
+(requirement) encode(self) -> bytes/bytearray -- returns the encoded octet string
+(suggestion) decode(self, octets, index=0) --
+  Return whatever information you like. Common to decode to self and return end_index.
+  Will NOT be called by auto-distributing function."""
 from common import *
 
 
@@ -29,6 +36,8 @@ def encode(value):
         return encode_oid(value)
     elif isinstance(value, list) or isinstance(value, Sequence):
         return encode_sequence(value)
+    elif hasattr(value, encode):
+        return value.encode()
     else:
         raise EncodeError("cannot encode type {}".format(type(value)))
 
@@ -268,18 +277,24 @@ def encode_oid(value):
         raise EncodeError("wrong identifier")
     i = ls[0] * 40 + ls[1]
     if i >= 0x80:
+        rev = bytearray()
         while i > 0:
-            octets.append(0x80 | (i & 0x7F))
+            rev.append(0x80 | (i & 0x7F))
             i >>= 7
-        octets[-1] &= 0x7F
+        rev[0] &= 0x7F
+        rev.reverse()
+        octets += rev
     else:
         octets.append(i)
     for i in ls[2:]:
         if i >= 0x80:
+            rev = bytearray()
             while i > 0:
-                octets.append(0x80 | (i & 0x7F))
+                rev.append(0x80 | (i & 0x7F))
                 i >>= 7
-            octets[-1] &= 0x7F
+            rev[0] &= 0x7F
+            rev.reverse()
+            octets += rev
         else:
             octets.append(i)
     return bytearray([0x6]) + encode_length_octets(len(octets)) + octets

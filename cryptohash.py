@@ -1,5 +1,52 @@
 from common import *
 import c_src.cryptohash
+import asn1
+
+
+class ASN1_HashAlg:
+    def __init__(self, oid: asn1.OID, param, hash_func=None, hlen: int = None):
+        self.oid = oid
+        self.param = param
+        self.hash_func = hash_func
+        self.hlen = hlen
+
+    @classmethod
+    def fromlist(cls, ls):
+        return cls(ls[0], ls[1])
+
+    def encode(self):
+        return asn1.encode_sequence([self.oid, self.param])
+
+    def decode(self, octets, index=0):
+        """Decode to self and return end index. Throw DecodeError."""
+        ls, index = asn1.decode_sequence(octets, index)
+        if len(ls) != 2 or not isinstance(ls[0], asn1.OID):
+            raise DecodeError
+        self.oid = ls[0]
+        self.param = ls[1]
+        return index
+
+
+class ASN1_DigestInfo:
+    def __init__(self, algid: ASN1_HashAlg, digest):
+        self.algid = algid
+        self.digest = digest
+
+    @classmethod
+    def fromlist(cls, ls):
+        return cls(ASN1_HashAlg.fromlist(ls[0]), ls[1])
+
+    def encode(self):
+        return asn1.encode_sequence([self.algid, self.digest])
+
+    def decode(self, octets, index=0):
+        """Decode to self and return end index. Throw DecodeError."""
+        ls, index = asn1.decode_sequence(octets, index)
+        if len(ls) != 2 or not isinstance(ls[0], list) or len(ls[0]) != 2:
+            raise DecodeError
+        self.algid = ASN1_HashAlg.fromlist(ls[0])
+        self.param = ls[1]
+        return index
 
 
 def md5(message):
@@ -142,7 +189,37 @@ def keccak_diy(message, l, cap, pad):
         return c_src.cryptohash.keccak_diy(message, l, cap, pad)
 
 
+id_digest_alg = asn1.OID(
+    "1.2.840.113549.2", "/ISO/Member-Body/US/RSADSI/DigestAlgorithm"
+)
+id_nist_hash = asn1.OID(
+    "2.16.840.1.101.3.4.2",
+    "/Joint-ISO-ITU-T/Country/US/Organization/gov/CSOR/NISTAlgorithm/HashAlgs",
+)
+id_secsig_alg = asn1.OID(
+    "1.3.14.3.2", "/ISO/Identified-Organization/OIW/SecSIG/Algorithms"
+)
+id_md5 = id_digest_alg.subnode("5", "MD5")
+alg_md5 = ASN1_HashAlg(id_md5, None, md5, 16)
+id_sha1 = id_secsig_alg.subnode("26", "SHA1")
+alg_sha1 = ASN1_HashAlg(id_sha1, None, sha1, 20)
+id_sha224 = id_nist_hash.subnode("4", "SHA224")
+alg_sha224 = ASN1_HashAlg(id_sha224, None, sha224, 28)
+id_sha256 = id_nist_hash.subnode("1", "SHA256")
+alg_sha256 = ASN1_HashAlg(id_sha256, None, sha256, 32)
+id_sha384 = id_nist_hash.subnode("2", "SHA384")
+alg_sha384 = ASN1_HashAlg(id_sha384, None, sha384, 48)
+id_sha512 = id_nist_hash.subnode("3", "SHA512")
+alg_sha512 = ASN1_HashAlg(id_sha512, None, sha512, 64)
+id_sha512_224 = id_nist_hash.subnode("5", "SHA512-224")
+alg_sha512_224 = ASN1_HashAlg(id_sha512_224, None, sha512_224, 28)
+id_sha512_256 = id_nist_hash.subnode("6", "SHA512-256")
+alg_sha512_256 = ASN1_HashAlg(id_sha512_256, None, sha512_256, 32)
+
+
 if __name__ == "__main__":
+    print("md5:", alg_md5.encode().hex())
+    print("sha512/256:", alg_sha512_256.encode().hex())
     a = input("Message: ")
     print(f"utf-8 encoded message length is: {len(a)} bytes")
     print(f"md5: 0x {md5(a).hex()}")

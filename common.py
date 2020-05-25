@@ -1,4 +1,7 @@
-def i2osp(i: int):
+"""Common functions and exception handling."""
+
+
+def i2osp(i: int, k=None):
     osp = bytearray()
     osp.append(i & 0xFF)
     i >>= 8
@@ -15,6 +18,12 @@ def i2osp(i: int):
         if not osp[-1] & 0x80:
             osp.append(0xFF)
     osp.reverse()
+    l = len(osp)
+    if k is not None:
+        if k > l:
+            return bytearray(k - l) + osp
+        elif k < l:
+            return osp[-k:]
     return osp
 
 
