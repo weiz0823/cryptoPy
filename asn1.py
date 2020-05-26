@@ -450,6 +450,23 @@ def decode_custom(octets, index=0, more_info=None):
         raise DecodeError("length of octets not enough")
 
 
+def encode_context(value, num):
+    if isinstance(value, Sequence):
+        value = value.ls
+    octets = bytearray()
+    for i in value:
+        octets += encode(i)
+    return encode_id_octets(num, True, 2) + encode_length_octets(len(octets)) + octets
+
+
+def wrap_sequence(octets):
+    return bytearray([0x30]) + encode_length_octets(len(octets)) + octets
+
+
+def wrap_context(octets, num):
+    return encode_id_octets(num, True, 2) + encode_id_octets(len(octets)) + octets
+
+
 class AlgID:
     def __init__(self, oid, param, func):
         self.oid = oid

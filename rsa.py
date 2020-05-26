@@ -9,7 +9,9 @@ import base64
 import randomart
 from common import *
 
-id_pkcs1 = asn1.OID("1.2.840.113549.1.1", "/ISO/Member-Body/US/RSADSI/PKCS/PKCS-1")
+id_pkcs1 = asn1.OID("1.2.840.113549.1.1",
+                    "/ISO/Member-Body/US/RSADSI/PKCS/PKCS-1")
+id_rsa = id_pkcs1.subnode("1", "RSAEncryption")
 
 
 class RSAPublicKey:
@@ -127,14 +129,15 @@ class RSAPrivateKey:
     rsasp = rsadp
 
     def decrypt_basic(self, cipher):
-        return i2osp(self.rsadp(os2ui(cipher)))
+        return i2osp(self.rsadp(os2ui(cipher)), self.klen)
 
     sign_basic = decrypt_basic
 
     def encode(self, fmt="pkcs1"):
         if fmt == "pkcs1":
             return asn1.encode_sequence(
-                [0, self.n, self.e, self.d, self.p, self.q, self.dp, self.dq, self.qinv]
+                [0, self.n, self.e, self.d, self.p,
+                    self.q, self.dp, self.dq, self.qinv]
             )
         else:
             raise EncodeError(f"format {fmt} not implemented")
@@ -210,6 +213,14 @@ class ASN1_PSpecified(asn1.AlgID):
     def __call__(self):
         return self.param
 
+    @classmethod
+    def fromlist(cls, ls):
+        if len(ls) != 2:
+            raise ValueError(f"expect length 2, get {len(ls)}")
+        if not isinstance(ls[0], asn1.OID) or not isinstance(ls[1], str):
+            raise TypeError
+        return cls(ls[1])
+
 
 alg_pemptylabel = ASN1_PSpecified()
 
@@ -230,7 +241,8 @@ class ASN1_RSASSA_PSS(asn1.AlgID):
         hlen = self.param[0].hlen
         saltlen = self.param[2]
         if emlen < hlen + saltlen + 2:
-            raise EncodeError("key too short, message too long, or salt too long")
+            raise EncodeError(
+                "key too short, message too long, or salt too long")
         salt = i2osp(random.getrandbits(saltlen << 3), saltlen)
         hh = self.param[0](bytearray(8) + hm + salt)
         em = bytearray(emlen - saltlen - hlen - 2)
@@ -282,6 +294,111 @@ class ASN1_RSASSA_PSS(asn1.AlgID):
                 return False
         return True
 
+    def encode(self):
+        """ASN.1 encode."""
+        octets = bytearray()
+        for i in range(3):
+            octets += asn1.encode_context([self.param[i]], i)
+        return asn1.wrap_sequence(octets)
+
+    def decode(self, octets, index=0):
+        ls, index = asn1.decode(octets, index)
+        if len(ls) != 4:
+            raise DecodeError(f"expect length 4, get {len(ls)}")
+        self.param = []
+        self.param.append(cryptohash.ASN1_HashAlg.fromlist(ls[0][0]))
+        self.param.append(mgf.ASN1_MGFAlg.fromlist(ls[1][0]))
+        if not isinstance(ls[2][0], int) or not isinstance(ls[3][0], int):
+            raise TypeError("expect two integers for parameter 2 and 3")
+        self.param.append(ls[2][0])
+        if ls[3][0] != 1:
+            raise ValueError("trailing field other than 0xBC not implemented")
+        self.param.append(ls[3][0])
+        return index
+
+
+id_rsaes_oaep = id_pkcs1.subnode("7", "RSAES-OAEP")
+
+
+class ASN1_RSAES_OAEP(asn1.AlgID):
+    def __init__(
+        self,
+        hash_alg=cryptohash.alg_sha1,
+        mgf_alg=mgf.alg_mgf1sha1,
+        psource_alg=alg_pemptylabel,
+    ):
+        self.oid = id_rsaes_oaep
+        self.param = [hash_alg, mgf_alg, psource_alg]
+        self.func = None
+
+    def encrypt(self, pub_key: RSAPublicKey, msg):
+        mlen = len(msg)
+        hlen = self.param[0].hlen
+        if mlen > pub_key.klen - 2 * hlen - 2:
+            raise EncryptError("message too long")
+        db = (
+            bytearray(self.param[0](self.param[2]()))
+            + bytearray(pub_key.klen - mlen - 2 * hlen - 2)
+            + bytearray([0x01])
+            + msg
+        )
+        seed = i2osp(random.getrandbits(hlen << 3), hlen)
+        mask = self.param[1](seed, pub_key.klen - hlen - 1)
+        for i in range(len(db)):
+            db[i] ^= mask[i]
+        mask = self.param[1](db, hlen)
+        for i in range(hlen):
+            seed[i] ^= mask[i]
+        em = bytearray(1) + seed + db
+        return pub_key.encrypt_basic(em)
+
+    def decrypt(self, prv_key: RSAPrivateKey, cipher):
+        if len(cipher) != prv_key.klen:
+            raise DecryptError
+        hlen = self.param[0].hlen
+        if prv_key.klen < 2 * hlen + 2:
+            raise DecryptError
+        em = prv_key.decrypt_basic(cipher)
+        if em[0] != 0:
+            raise DecryptError
+        seed = em[1: hlen + 1]
+        db = em[hlen + 1:]
+        mask = self.param[1](db, hlen)
+        for i in range(hlen):
+            seed[i] ^= mask[i]
+        mask = self.param[1](seed, prv_key.klen - hlen - 1)
+        for i in range(len(db)):
+            db[i] ^= mask[i]
+        lhash = self.param[0](self.param[2]())
+        for i in range(hlen):
+            if lhash[i] != db[i]:
+                raise DecryptError
+        for i in range(hlen, len(em)):
+            if db[i] != 0:
+                break
+        else:
+            raise DecryptError
+        if db[i] != 1:
+            raise DecryptError
+        return db[i + 1:]
+
+    def encode(self):
+        """ASN.1 encode."""
+        octets = bytearray()
+        for i in range(3):
+            octets += asn1.encode_context([self.param[i]], i)
+        return asn1.wrap_sequence(octets)
+
+    def decode(self, octets, index=0):
+        ls, index = asn1.decode(octets, index)
+        if len(ls) != 3:
+            raise DecodeError(f"expect length 3, get {len(ls)}")
+        self.param = []
+        self.param.append(cryptohash.ASN1_HashAlg.fromlist(ls[0][0]))
+        self.param.append(mgf.ASN1_MGFAlg.fromlist(ls[1][0]))
+        self.param.append(ASN1_PSpecified.fromlist(ls[2][0]))
+        return index
+
 
 if __name__ == "__main__":
     wrapper = textwrap.TextWrapper()
@@ -303,13 +420,21 @@ if __name__ == "__main__":
     print("Test 1024...")
     pub, prv = keygen(1024)
     pub.print_fingerprint()
-    with open("rsa.txt", "w") as f:
-        f.write(textwrap.fill(base64.b64encode(pub.encode("pkcs1")).decode("utf-8")))
-        f.write("\n\n")
-        f.write(textwrap.fill(base64.b64encode(prv.encode("pkcs1")).decode("utf-8")))
-        f.write("\n\n")
-        f.write("The tendency of hierarchies in office environments to be diffuse")
-        f.write(" and preclude crisp articulation. -- Douglas Coupland\n")
+    s = input("Write to file? (y/n) ")
+    if s == "y":
+        with open("rsa.txt", "w") as f:
+            f.write("n\n")
+            f.write(
+                textwrap.fill(base64.b64encode(
+                    pub.encode("pkcs1")).decode("utf-8"))
+            )
+            f.write("\n\n")
+            f.write(
+                textwrap.fill(base64.b64encode(
+                    prv.encode("pkcs1")).decode("utf-8"))
+            )
+            f.write("\n\n")
+            f.write("A quick brown fox jumps over the lazy dog.\n")
 
     s = input("Public key: ")
     if s != "":
@@ -317,21 +442,27 @@ if __name__ == "__main__":
         while s != "":
             key += s
             s = input()
-        pub = RSAPublicKey.fromlist(asn1.decode(base64.b64decode(key))[0], "pkcs1")
+        pub = RSAPublicKey.fromlist(asn1.decode(
+            base64.b64decode(key))[0], "pkcs1")
     s = input("Private key: ")
     if s != "":
         key = ""
         while s != "":
             key += s
             s = input()
-        prv = RSAPrivateKey.fromlist(asn1.decode(base64.b64decode(key))[0], "pkcs1")
+        prv = RSAPrivateKey.fromlist(
+            asn1.decode(base64.b64decode(key))[0], "pkcs1")
 
     msg = input("Message: ")
     print()
     cipher = pub.encrypt_basic(msg)
     print(textwrap.fill(f"RSA-1024 encrypted: {cipher.hex()}"))
     print(f"Decrypted: {prv.decrypt_basic(cipher).decode('utf-8')}")
+    oaep = ASN1_RSAES_OAEP()
+    cipher = oaep.encrypt(pub, bytearray(msg, "utf-8"))
+    print(textwrap.fill(f"RSAES-OAEP encrypted: {cipher.hex()}"))
+    print(f"Decrypted: {oaep.decrypt(prv, cipher).decode('utf-8')}")
     pss = ASN1_RSASSA_PSS()
     sign = pss.sign(prv, bytearray(msg, "utf-8"))
-    print(textwrap.fill(f"RSA-1024 signature: {sign.hex()}"))
+    print(textwrap.fill(f"RSASSA-PSS signature: {sign.hex()}"))
     print(f"Consistent? {pss.verify(pub, msg, sign)}")
