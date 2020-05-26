@@ -1,2 +1,6 @@
 #!/usr/bin/env sh
-./c_src/cryptohash/build.sh
+cd c_src
+cd cryptohash
+./build.sh
+cd ..
+cd ..

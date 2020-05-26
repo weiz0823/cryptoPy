@@ -243,7 +243,7 @@ def decode_bool(octets, index=0):
 
 def encode_int(value):
     osp = i2osp(value)
-    return bytearray([0x2]) + encode_length_octets(len(a)) + osp
+    return bytearray([0x2]) + encode_length_octets(len(osp)) + osp
 
 
 def decode_int(octets, index=0):
