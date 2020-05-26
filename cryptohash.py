@@ -3,28 +3,18 @@ import c_src.cryptohash
 import asn1
 
 
-class ASN1_HashAlg:
-    def __init__(self, oid: asn1.OID, param, hash_func=None, hlen: int = None):
+class ASN1_HashAlg(asn1.AlgID):
+    def __init__(self, oid: asn1.OID, param, func, hlen):
         self.oid = oid
         self.param = param
-        self.hash_func = hash_func
+        self.func = func
         self.hlen = hlen
 
-    @classmethod
-    def fromlist(cls, ls):
-        return cls(ls[0], ls[1])
-
-    def encode(self):
-        return asn1.encode_sequence([self.oid, self.param])
-
-    def decode(self, octets, index=0):
-        """Decode to self and return end index. Throw DecodeError."""
-        ls, index = asn1.decode_sequence(octets, index)
-        if len(ls) != 2 or not isinstance(ls[0], asn1.OID):
-            raise DecodeError
-        self.oid = ls[0]
-        self.param = ls[1]
-        return index
+    def __call__(self, octets):
+        if self.param is None:
+            return self.func(octets)
+        else:
+            return self.func(octets, param)
 
 
 class ASN1_DigestInfo:

@@ -217,12 +217,13 @@ def encode_null():
     return bytearray([0x5, 0])
 
 
-def decode_null():
+def decode_null(octets, index=0):
     try:
         if octets[index] != 0x5 or octets[index + 1] != 0:
             raise DecodeError("not a null object")
     except IndexError:
         raise DecodeError("length of octets not enough")
+    return None, index + 2
 
 
 def encode_bool(value):
@@ -447,6 +448,35 @@ def decode_custom(octets, index=0, more_info=None):
         return ls, end_index
     except IndexError:
         raise DecodeError("length of octets not enough")
+
+
+class AlgID:
+    def __init__(self, oid, param, func):
+        self.oid = oid
+        self.param = param
+        self.func = func
+
+    @classmethod
+    def fromlist(cls, ls):
+        return cls(ls[0], ls[1])
+
+    def encode(self):
+        return encode_sequence([self.oid, self.param])
+
+    def decode(self, octets, index=0):
+        """Decode to self and return end index. Throw DecodeError."""
+        ls, index = decode_sequence(octets, index)
+        if len(ls) != 2 or not isinstance(ls[0], asn1.OID):
+            raise DecodeError
+        self.oid = ls[0]
+        self.param = ls[1]
+        return index
+
+    def __call__(self):
+        if self.param is None:
+            return self.func()
+        else:
+            return self.func(param)
 
 
 if __name__ == "__main__":
