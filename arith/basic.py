@@ -3,6 +3,10 @@ import math
 import random
 
 
+def lcm(a: int, b: int):
+    return a * b // math.gcd(a, b)
+
+
 def trailing_zeros(a: int):
     """Return number of trailing zeros in binary representation of a.
     Return 0 when a==0."""

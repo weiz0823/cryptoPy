@@ -1,6 +1,11 @@
 """Modular arithmetic with bteer readability with class Mod."""
 from functools import total_ordering
-from basic import *
+import math
+
+if __name__ == "__main__":
+    import basic
+else:
+    from . import basic
 
 
 @total_ordering
@@ -103,7 +108,7 @@ class Mod:
         return math.gcd(self.value, self.modulus) == 1
 
     def inv(self):
-        d, x, _ = ext_gcd(self.value, self.modulus)
+        d, x, _ = basic.ext_gcd(self.value, self.modulus)
         if d != 1:
             raise ValueError(
                 "gcd({},{}) == {} is not 1, not invertible".format(
@@ -161,7 +166,7 @@ class Mod:
         elif self.value == 0:
             return 0
         # separate prime factor 2
-        e = trailing_zeros(self.value)
+        e = basic.trailing_zeros(self.value)
         a = self.value >> e
         # calculate jacobi(2^e, modulus)
         t = self.modulus & 7
@@ -193,6 +198,20 @@ class Mod:
                 )
             else:
                 return Mod(self.value >> 1, self.modulus >> 1)
+
+
+def crt(m1: Mod, m2: Mod, n1inv: int = None):
+    """Use CRT to get the same value in new modulus n1*n2.
+    Precomputed ninv could be provided as m1.modulus^{-1} mod m2.modulus.
+    Require gcd(m1.modulus, m2.modulus) = 1."""
+    if n1inv is None:
+        try:
+            n1inv = Mod(m1.modulus, m2.modulus).inv().value
+        except ValueError:
+            raise ValueError("modulus not relatively prime, could not perform CRT")
+    # knowing CRT holds, we can construct value by whatever means
+    h = (m2 - m1.value) * n1inv
+    return Mod(m1.value + m1.modulus * h.value, m1.modulus * m2.modulus)
 
 
 if __name__ == "__main__":

@@ -36,10 +36,11 @@ def encode(value):
         return encode_oid(value)
     elif isinstance(value, list) or isinstance(value, Sequence):
         return encode_sequence(value)
-    elif hasattr(value, encode):
-        return value.encode()
     else:
-        raise EncodeError("cannot encode type {}".format(type(value)))
+        try:
+            return value.encode()
+        except ValueError or AttributeError:
+            raise EncodeError("cannot encode type {}".format(type(value)))
 
 
 def decode(octets, index=0):

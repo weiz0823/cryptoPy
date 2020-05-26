@@ -27,8 +27,8 @@ def i2osp(i: int, k=None):
     return osp
 
 
-def os2ip(osp):
-    if osp[0] & 0x80:
+def os2ip(osp, possible_negative=True):
+    if possible_negative and osp[0] & 0x80:
         i = -1
     else:
         i = 0
@@ -36,6 +36,10 @@ def os2ip(osp):
         i <<= 8
         i |= o
     return i
+
+
+def os2ui(osp):
+    return os2ip(osp, False)
 
 
 class CryptoError(Exception):

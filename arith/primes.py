@@ -1,5 +1,9 @@
 """Primality tests, random prime generation, and things related with prime."""
-from basic import *
+
+if __name__ == "__main__":
+    import basic
+else:
+    from . import basic
 
 
 def prime_sieve(n: int):
@@ -49,7 +53,7 @@ def miller_rabin(w: int, iters=10):
     elif w < 2:
         return False
     t = w - 1
-    a = trailing_zeros(t)
+    a = basic.trailing_zeros(t)
     m = t >> a
     for _ in range(iters):
         b = random.randint(2, w - 2)
@@ -87,7 +91,7 @@ def miller_rabin_quick(w: int, iters=10):
         elif w % b == 0:
             return False
     t = w - 1
-    a = trailing_zeros(t)
+    a = basic.trailing_zeros(t)
     m = t >> a
     for i in range(iters):
         b = prime_list16[i]
@@ -121,8 +125,8 @@ def random_prime(bitlen: int):
     elif bitlen == 2:
         return random.randint(2, 3)
     p = 2
-    while intlen(p) != bitlen:
-        p = fixedrandbits(bitlen, True)
+    while basic.intlen(p) != bitlen:
+        p = basic.fixedrandbits(bitlen, True)
         p = to_next_prime(p)
     return p
 
