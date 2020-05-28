@@ -7,6 +7,10 @@ def lcm(a: int, b: int):
     return a * b // math.gcd(a, b)
 
 
+def ceildiv(a: int, b: int):
+    return (a + b - 1) // b
+
+
 def trailing_zeros(a: int):
     """Return number of trailing zeros in binary representation of a.
     Return 0 when a==0."""
@@ -95,13 +99,23 @@ def isperfectsuqare(a: int):
     x = random.getrandbits(m)
     x |= 1 << (m - 1)
     t = x * x
+    # FIPS 186-4 Appendix C.4 explains these
     bound = (1 << m) + a
     for _ in range(m):
-        x = (t + a) / (2 * x)  # x is float
+        # real x >= sqrt(a), so floordiv converge faster and avoid truncation error
+        x = (t + a) // (2 * x)
         t = x * x
         if t < bound:
             break
-    if c == math.floor(x) ** 2:
+    if a == t:
         return True
     else:
         return False
+
+
+if __name__ == "__main__":
+    for _ in range(10000):
+        i = random.getrandbits(random.randint(10, 1000))
+        if not isperfectsuqare(i * i):
+            raise RuntimeError(f"square {i}**2 error")
+    print("perfect square test passed!")

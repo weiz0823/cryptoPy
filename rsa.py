@@ -1,3 +1,4 @@
+"""Rivest-Shamir–Adleman public-key cryptosystem specified in FIPS 186."""
 from arith import basic, mod, primes
 import mgf
 import asn1
@@ -9,9 +10,28 @@ import base64
 import randomart
 from common import *
 
-id_pkcs1 = asn1.OID("1.2.840.113549.1.1",
-                    "/ISO/Member-Body/US/RSADSI/PKCS/PKCS-1")
+id_pkcs1 = asn1.OID("1.2.840.113549.1.1", "/ISO/Member-Body/US/RSADSI/PKCS/PKCS-1")
 id_rsa = id_pkcs1.subnode("1", "RSAEncryption")
+
+
+def secure_len(strength):
+    """Return the bit length of RSA with security strength not less than required."""
+    # SP 800-57 Table 2
+    if strength <= 80:
+        return 1024
+    elif strength <= 112:
+        return 2048
+    elif strength <= 128:
+        return 3072
+    elif strength <= 192:
+        return 7680
+    elif strength <= 256:
+        return 15360
+    else:
+        warnings.warn(
+            "maximum security strength for RSA is 256 for RSA-15360", SecurityWarning
+        )
+        return 15360
 
 
 class RSAPublicKey:
@@ -136,8 +156,7 @@ class RSAPrivateKey:
     def encode(self, fmt="pkcs1"):
         if fmt == "pkcs1":
             return asn1.encode_sequence(
-                [0, self.n, self.e, self.d, self.p,
-                    self.q, self.dp, self.dq, self.qinv]
+                [0, self.n, self.e, self.d, self.p, self.q, self.dp, self.dq, self.qinv]
             )
         else:
             raise EncodeError(f"format {fmt} not implemented")
@@ -168,7 +187,7 @@ class RSAPrivateKey:
             raise ValueError(f"format {fmt} not implemented")
 
 
-def keygen(bitlen=1024):
+def keygen(bitlen=2048):
     """Return RSA key pair (pub_key, prv_key)"""
     if bitlen < 1024:
         warnings.warn("bitlen less than 1024 is insecure", SecurityWarning)
@@ -186,7 +205,7 @@ def keygen(bitlen=1024):
     key.m = basic.lcm(key.p - 1, key.q - 1)
     key.d = None
     while key.d is None:
-        key.e = random.randint(3, 1 << 20)
+        key.e = random.randint(1 << 16, 1 << 256)
         if key.e & 1 == 0:
             key.e += 1
         try:
@@ -241,8 +260,7 @@ class ASN1_RSASSA_PSS(asn1.AlgID):
         hlen = self.param[0].hlen
         saltlen = self.param[2]
         if emlen < hlen + saltlen + 2:
-            raise EncodeError(
-                "key too short, message too long, or salt too long")
+            raise EncodeError("key too short, message too long, or salt too long")
         salt = i2osp(random.getrandbits(saltlen << 3), saltlen)
         hh = self.param[0](bytearray(8) + hm + salt)
         em = bytearray(emlen - saltlen - hlen - 2)
@@ -361,8 +379,8 @@ class ASN1_RSAES_OAEP(asn1.AlgID):
         em = prv_key.decrypt_basic(cipher)
         if em[0] != 0:
             raise DecryptError
-        seed = em[1: hlen + 1]
-        db = em[hlen + 1:]
+        seed = em[1 : hlen + 1]
+        db = em[hlen + 1 :]
         mask = self.param[1](db, hlen)
         for i in range(hlen):
             seed[i] ^= mask[i]
@@ -380,7 +398,7 @@ class ASN1_RSAES_OAEP(asn1.AlgID):
             raise DecryptError
         if db[i] != 1:
             raise DecryptError
-        return db[i + 1:]
+        return db[i + 1 :]
 
     def encode(self):
         """ASN.1 encode."""
@@ -425,13 +443,11 @@ if __name__ == "__main__":
         with open("rsa.txt", "w") as f:
             f.write("n\n")
             f.write(
-                textwrap.fill(base64.b64encode(
-                    pub.encode("pkcs1")).decode("utf-8"))
+                textwrap.fill(base64.b64encode(pub.encode("pkcs1")).decode("utf-8"))
             )
             f.write("\n\n")
             f.write(
-                textwrap.fill(base64.b64encode(
-                    prv.encode("pkcs1")).decode("utf-8"))
+                textwrap.fill(base64.b64encode(prv.encode("pkcs1")).decode("utf-8"))
             )
             f.write("\n\n")
             f.write("A quick brown fox jumps over the lazy dog.\n")
@@ -442,16 +458,14 @@ if __name__ == "__main__":
         while s != "":
             key += s
             s = input()
-        pub = RSAPublicKey.fromlist(asn1.decode(
-            base64.b64decode(key))[0], "pkcs1")
+        pub = RSAPublicKey.fromlist(asn1.decode(base64.b64decode(key))[0], "pkcs1")
     s = input("Private key: ")
     if s != "":
         key = ""
         while s != "":
             key += s
             s = input()
-        prv = RSAPrivateKey.fromlist(
-            asn1.decode(base64.b64decode(key))[0], "pkcs1")
+        prv = RSAPrivateKey.fromlist(asn1.decode(base64.b64decode(key))[0], "pkcs1")
 
     msg = input("Message: ")
     print()

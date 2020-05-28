@@ -2,7 +2,7 @@
 from functools import total_ordering
 import math
 
-if __name__ == "__main__":
+if "." not in __name__:
     import basic
 else:
     from . import basic
@@ -59,7 +59,7 @@ class Mod:
         if converted is NotImplemented:
             return NotImplemented
         else:
-            return self.value == converted
+            return self.value == converted % self.modulus
 
     def __lt__(self, other):
         converted = self._convert(other)

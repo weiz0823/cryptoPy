@@ -1,20 +1,28 @@
 from common import *
+import warnings
 import c_src.cryptohash
 import asn1
 
 
 class ASN1_HashAlg(asn1.AlgID):
-    def __init__(self, oid: asn1.OID, param, func, hlen):
+    def __init__(self, oid, param, func, hlen, collision_resist, extension_resist):
         self.oid = oid
         self.param = param
         self.func = func
+        # in byte
         self.hlen = hlen
+        # in bit
+        self.collision_resist = collision_resist
+        self.extension_resist = extension_resist
 
     def __call__(self, octets):
         if self.param is None:
             return self.func(octets)
         else:
             return self.func(octets, param)
+
+    def security_strength(self):
+        return self.collision_resist
 
 
 class ASN1_DigestInfo:
@@ -39,6 +47,17 @@ class ASN1_DigestInfo:
         return index
 
 
+def _warn_hash(typebit, msg_len):
+    if typebit == 512:
+        # 2^64 bits message length
+        if msg_len >= 1 << 61:
+            warnings.warn("message too long, hash insecure", SecurityWarning)
+    elif typebit == 1024:
+        # 2^128 bits message length
+        if msg_len >= 1 << 125:
+            warnings.warn("message too long, hash insecure", SecurityWarning)
+
+
 def md5(message):
     if isinstance(message, str):
         return c_src.cryptohash.md5(bytes(message, "utf-8"))
@@ -47,6 +66,7 @@ def md5(message):
 
 
 def sha1(message):
+    _warn_hash(512, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha1(bytes(message, "utf-8"))
     else:
@@ -54,6 +74,7 @@ def sha1(message):
 
 
 def sha224(message):
+    _warn_hash(512, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha224(bytes(message, "utf-8"))
     else:
@@ -61,6 +82,7 @@ def sha224(message):
 
 
 def sha256(message):
+    _warn_hash(512, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha256(bytes(message, "utf-8"))
     else:
@@ -68,6 +90,7 @@ def sha256(message):
 
 
 def sha384(message):
+    _warn_hash(1024, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha384(bytes(message, "utf-8"))
     else:
@@ -75,6 +98,7 @@ def sha384(message):
 
 
 def sha512(message):
+    _warn_hash(1024, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha512(bytes(message, "utf-8"))
     else:
@@ -82,6 +106,7 @@ def sha512(message):
 
 
 def sha512t(message, t):
+    _warn_hash(1024, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha512t(bytes(message, "utf-8"), t)
     else:
@@ -89,6 +114,7 @@ def sha512t(message, t):
 
 
 def sha512_224(message):
+    _warn_hash(1024, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha512_224(bytes(message, "utf-8"))
     else:
@@ -96,6 +122,7 @@ def sha512_224(message):
 
 
 def sha512_256(message):
+    _warn_hash(1024, len(message))
     if isinstance(message, str):
         return c_src.cryptohash.sha512_256(bytes(message, "utf-8"))
     else:
@@ -190,21 +217,34 @@ id_secsig_alg = asn1.OID(
     "1.3.14.3.2", "/ISO/Identified-Organization/OIW/SecSIG/Algorithms"
 )
 id_md5 = id_digest_alg.subnode("5", "MD5")
-alg_md5 = ASN1_HashAlg(id_md5, None, md5, 16)
+alg_md5 = ASN1_HashAlg(id_md5, None, md5, 16, 18, 0)
 id_sha1 = id_secsig_alg.subnode("26", "SHA1")
-alg_sha1 = ASN1_HashAlg(id_sha1, None, sha1, 20)
+alg_sha1 = ASN1_HashAlg(id_sha1, None, sha1, 20, 62, 0)
 id_sha224 = id_nist_hash.subnode("4", "SHA224")
-alg_sha224 = ASN1_HashAlg(id_sha224, None, sha224, 28)
+alg_sha224 = ASN1_HashAlg(id_sha224, None, sha224, 28, 112, 32)
 id_sha256 = id_nist_hash.subnode("1", "SHA256")
-alg_sha256 = ASN1_HashAlg(id_sha256, None, sha256, 32)
+alg_sha256 = ASN1_HashAlg(id_sha256, None, sha256, 32, 128, 0)
 id_sha384 = id_nist_hash.subnode("2", "SHA384")
-alg_sha384 = ASN1_HashAlg(id_sha384, None, sha384, 48)
+alg_sha384 = ASN1_HashAlg(id_sha384, None, sha384, 48, 192, 128)
 id_sha512 = id_nist_hash.subnode("3", "SHA512")
-alg_sha512 = ASN1_HashAlg(id_sha512, None, sha512, 64)
+alg_sha512 = ASN1_HashAlg(id_sha512, None, sha512, 64, 256, 0)
 id_sha512_224 = id_nist_hash.subnode("5", "SHA512-224")
-alg_sha512_224 = ASN1_HashAlg(id_sha512_224, None, sha512_224, 28)
+alg_sha512_224 = ASN1_HashAlg(id_sha512_224, None, sha512_224, 28, 112, 288)
 id_sha512_256 = id_nist_hash.subnode("6", "SHA512-256")
-alg_sha512_256 = ASN1_HashAlg(id_sha512_256, None, sha512_256, 32)
+alg_sha512_256 = ASN1_HashAlg(id_sha512_256, None, sha512_256, 32, 128, 256)
+id_sha3_224 = id_nist_hash.subnode("7", "SHA3-224")
+alg_sha3_224 = ASN1_HashAlg(id_sha3_224, None, sha3_224, 28, 112, 448)
+id_sha3_256 = id_nist_hash.subnode("8", "SHA3-256")
+alg_sha3_256 = ASN1_HashAlg(id_sha3_256, None, sha3_256, 32, 128, 512)
+id_sha3_384 = id_nist_hash.subnode("9", "SHA3-384")
+alg_sha3_384 = ASN1_HashAlg(id_sha3_384, None, sha3_384, 48, 192, 768)
+id_sha3_512 = id_nist_hash.subnode("10", "SHA3-512")
+alg_sha3_512 = ASN1_HashAlg(id_sha3_512, None, sha3_512, 64, 256, 1024)
+# collision resist of shake is min(hashbitlen/2, capacity)
+id_shake128 = id_nist_hash.subnode("11", "SHAKE128")
+alg_shake128 = ASN1_HashAlg(id_shake128, None, shake128, 32, 128, 256)
+id_shake256 = id_nist_hash.subnode("12", "SHAKE256")
+alg_shake256 = ASN1_HashAlg(id_shake256, None, shake256, 64, 256, 512)
 
 
 if __name__ == "__main__":
@@ -222,10 +262,10 @@ if __name__ == "__main__":
     print(f"sha512/224: 0x {sha512_224(a).hex()}")
     print(f"sha512/t (t=256): 0x {sha512t(a, 256).hex()}")
     print(f"sha512/256: 0x {sha512_256(a).hex()}")
-    print(f"sha3_224: 0x {sha3_224(a).hex()}")
-    print(f"sha3_256: 0x {sha3_256(a).hex()}")
-    print(f"sha3_384: 0x {sha3_384(a).hex()}")
-    print(f"sha3_512: 0x {sha3_512(a).hex()}")
+    print(f"sha3-224: 0x {sha3_224(a).hex()}")
+    print(f"sha3-256: 0x {sha3_256(a).hex()}")
+    print(f"sha3-384: 0x {sha3_384(a).hex()}")
+    print(f"sha3-512: 0x {sha3_512(a).hex()}")
     print(f"shake128: 0x {shake128(a).hex()}")
     print(f"shake128l (l=256): 0x {shake128l(a, 256).hex()}")
     print(f"shake256: 0x {shake256(a).hex()}")

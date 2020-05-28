@@ -1,9 +1,19 @@
 """Primality tests, random prime generation, and things related with prime."""
 
-if __name__ == "__main__":
+import sys
+import os
+import random
+import math
+
+sys.path.append(os.path.dirname(sys.path[0])) # parent directory
+import common
+
+if "." not in __name__:
     import basic
+    import mod
 else:
     from . import basic
+    from . import mod
 
 
 def prime_sieve(n: int):
@@ -109,6 +119,76 @@ def miller_rabin_quick(w: int, iters=10):
     return True
 
 
+def general_lucas_test(n: int):
+    if n & 1 == 0:
+        if n == 2:
+            return True
+        else:
+            return False
+    if basic.isperfectsuqare(n):
+        return False
+    # if n is perfect square, there will never be jacobi(d/n) == -1
+    # choose d from sequence 5,-7,9,-11,... until jacobi(d/n) == -1
+    d = 5
+    j = mod.Mod(d, n).jacobi()
+    while j != -1:
+        if j == 0:
+            # that means gcd(d,n) > 1
+            return False
+        if d > 0:
+            d = -d - 2
+        else:
+            d = -d + 2
+        j = mod.Mod(d, n).jacobi()
+    m = common.i2osp(n + 1)
+    # u[1] and v[1], where P=1
+    u = mod.Mod(1, n)
+    v = mod.Mod(1, n)
+    i = 0
+    mask = 0x80
+    # find the MSB
+    while mask & m[i] == 0:
+        mask >>= 1
+        if mask == 0:
+            mask = 0x80
+            i += 1
+    mask >>= 1
+    for i in range(i, len(m)):
+        while mask != 0:
+            # k -> 2k
+            u, v = u * v, (v * v + d * u * u).half()
+            # 2k -> 2k+1
+            if mask & m[i] != 0:
+                # u=(u+v)/2 is from P=1
+                u, v = (u + v).half(), (v + d * u).half()
+            mask >>= 1
+        mask = 0x80
+    return u == 0
+
+
+def baillie_psw(n: int, iters=10, mriters=1):
+    """Baillie-PSW primality test.
+
+    n -- number to be tested
+    iters -- iterations of trial division
+    mriters -- iterations of Miller-Rabin"""
+    global prime_list16
+    if n <= prime_list16[mriters - 1]:
+        return isprime(n)
+    for i in range(mriters, iters):
+        if n < prime_list16[i]:
+            return False
+        elif n == prime_list16[i]:
+            return True
+        elif n % prime_list16[i] == 0:
+            return False
+    if not miller_rabin_quick(n, 1):
+        # do a M-R on base 2
+        return False
+    # Lucas pseudoprimes overlap little with Fermat pseudoprimes on base 2
+    return general_lucas_test(n)
+
+
 def to_next_prime(a: int):
     if a <= 2:
         return 2
@@ -131,8 +211,82 @@ def random_prime(bitlen: int):
     return p
 
 
+def st_random_prime(bitlen: int, factor=None):
+    """Shawe-Taylor prime construction.
+
+    factor -- required factor of p-1.
+              intlen(factor) SHALL be less than (bitlen-5)/2."""
+    if bitlen < 2:
+        raise ValueError("random prime must be at least 2-bit long")
+    elif bitlen == 2:
+        return random.randint(2, 3)
+    elif bitlen < 33:
+        # brute-force prime generation
+        # prime density is about 1/log(n), i.e. 1.44/bitlen
+        for i in range(bitlen << 2):
+            p = basic.fixedrandbits(bitlen, True)
+            if isprime(p):
+                return p
+        raise RuntimeError("didn't get a prime")
+    elif factor is not None:
+        if basic.intlen(factor) >= (bitlen - 5) >> 1:
+            raise ValueError("required factor too large")
+        p0 = st_random_prime((bitlen + 3) >> 1)
+        # now p2 contains the factor
+        p2 = (p0 + p0) * factor
+        t = basic.ceildiv(basic.fixedrandbits(bitlen, False), p2)
+        for i in range(bitlen << 2):
+            # first p>randint with p==1 mod p2
+            # p0*t+1 works, but if t is odd, then it will never be prime
+            p = p2 * t + 1
+            if basic.intlen(p) != bitlen:
+                # if t is too big, fall back to the smallest one
+                t = basic.ceildiv(1 << (bitlen - 1), p2)
+                p = p2 * t + 1
+            a = random.randint(2, p - 2)
+            z = pow(a, (t + t) * factor, p)
+            if math.gcd(z - 1, p) == 1 and pow(z, p0, p) == 1:
+                # proven prime with the help of p0
+                return p
+            # if fail, don't get a new p0, try a new t instead
+            t += 1
+        raise RuntimeError("didn't get a prime")
+    else:
+        # big prime based on smaller prime
+        p0 = st_random_prime((bitlen + 3) >> 1)
+        p2 = p0 + p0
+        t = basic.ceildiv(basic.fixedrandbits(bitlen, False), p2)
+        for i in range(bitlen << 2):
+            # first p>randint with p==1 mod p2
+            # p0*t+1 works, but if t is odd, then it will never be prime
+            p = p2 * t + 1
+            if basic.intlen(p) != bitlen:
+                # if t is too big, fall back to the smallest one
+                t = basic.ceildiv(1 << (bitlen - 1), p2)
+                p = p2 * t + 1
+            a = random.randint(2, p - 2)
+            z = pow(a, t + t, p)
+            if math.gcd(z - 1, p) == 1 and pow(z, p0, p) == 1:
+                # proven prime with the help of p0
+                return p
+            # if fail, don't get a new p0, try a new t instead
+            t += 1
+        raise RuntimeError("didn't get a prime")
+
+
 prime_list16 = prime_sieve(65536)
 if __name__ == "__main__":
     print(f"prime test 2, 37, 65533: {isprime(2)}, {isprime(37)}, {isprime(65533)}")
-    print(f"Random prime: {random_prime(256)}")
+    r = random_prime(256)
+    print(f"Random prime: {r}")
+    q = st_random_prime(160)
+    print(f"ST random prime: {q}")
+    p = st_random_prime(512, q)
+    print(f"ST random prime with required factor of p-1: {p}")
+    print(f"  cross-check prime test: {miller_rabin(p)}, factor test: {(p-1)%q==0}")
+    print(
+        "General lucas test: {}, {}, {}".format(
+            general_lucas_test(r), general_lucas_test(q), general_lucas_test(p)
+        )
+    )
     print("Tests passed!")
